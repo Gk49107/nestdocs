@@ -1,0 +1,144 @@
+auth.module.ts
+--------------------------------
+import { PassportModule } from '@nestjs/passport'
+import { JwtStrategy } from 'src/jwt.strategy';
+
+@Module({
+  controllers: [UserController],
+  providers: [UserService,JwtStrategy], //logged in user verification 
+  exports:[JwtStrategy,PassportModule], //export another modules
+  imports : [ PassportModule.register({defaultStrategy: 'jwt'}),
+    JwtModule.registerAsync({
+     inject:[ConfigService],
+     useFactory:(config : ConfigService)=>{
+       return{
+         secret: config.get<string>('JWT_SECRET'),
+         signOptions: {
+           expiresIn : config.get<string | number>('JWT_EXPIRES')
+         }
+       }
+ 
+     }
+   }), 
+ ]
+
+auth.service.ts
+-------------------------------
+import { JwtService } from '@nestjs/jwt';
+@Injectable()
+export class UserService {
+    constructor(
+       private jwtService: JwtService, //create jwt token using services
+      ){}
+
+//function implementaion
+  async login(data: UserDto): Promise<{ token: string , res:User  }> {
+        const { email, password } = data;
+        const user = await this.UserModel.findOne({ email }).select('password')
+         const token = this.jwtService.sign({ id: user._id });
+         return { token , res};
+      }
+      
+auth.controller.ts
+---------------------------
+import { AuthGuard } from '@nestjs/passport';
+
+@Controller('user')
+export class UserController {
+
+@Get('/myprofile')
+@UseGuards(AuthGuard()) //check loggedin and role based access also 
+ myprofile(@Req() req):Promise<User>{
+    return this.userservice.myprofile(req);
+ }
+}
+
+jwtStrategy.ts
+----------------------------
+
+import { Injectable ,UnauthorizedException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import {PassportStrategy} from '@nestjs/passport'
+import { Model } from 'mongoose';
+import {Strategy , ExtractJwt } from 'passport-jwt'
+import { User } from './entity/interface/user.interface';
+
+@Injectable()
+export class JwtStrategy extends PassportStrategy(Strategy){
+constructor(@InjectModel('user') private userModel:Model<User>){
+super({
+  //  jwtFormRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+    secretOrKey:process.env.JWT_SECRET
+});
+}
+async validate(payload){
+    const {id} =payload;
+    const user  = await this.userModel.findById(id);
+     if(!user){
+        throw new UnauthorizedException("login frist to access this enpoint")
+     }
+return user;
+}
+
+}
+
+role.decotor.ts
+---------------------
+import {SetMetadata} from '@nestjs/common'
+
+export const Role_key = 'roles';
+export const Roles =(roles: string[]) => SetMetadata(Role_key ,roles) 
+
+
+role.guards.ts
+----------------------
+
+import {ExecutionContext, Injectable ,CanActivate } from '@nestjs/common'
+import {Reflector} from '@nestjs/core';
+
+@Injectable()
+export class RoleGuard implements CanActivate{
+    constructor(private reflector:Reflector){}
+    
+    matchRoles(roles: string[],userRole:string){
+   return roles.some(role => role === userRole)
+
+    }
+    canActivate(context : ExecutionContext):boolean{
+        console.log("roles inside ")
+    const roles = this.reflector.get<string[]>('roles' , context.getHandler())
+    console.log(roles)
+    if(!roles){
+    return true;
+    }    
+    
+    const request = context.switchToHttp().getRequest();
+    
+    const user = request.user;
+    console.log(user)
+    return  this.matchRoles(roles ,user.role)
+        
+    }
+
+}
+
+auth.controller.ts
+---------------------------
+import { AuthGuard } from '@nestjs/passport';
+
+@Controller('user')
+export class UserController {
+
+@Get('/myprofile')
+@Roles(['Admin'])
+@UseGuards(AuthGuard(),RoleGuards) //check loggedin and role based access also 
+ myprofile(@Req() req):Promise<User>{
+    return this.userservice.myprofile(req);
+ }
+}
+
+
+
+
+
