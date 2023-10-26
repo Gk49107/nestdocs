@@ -23,6 +23,20 @@ async function bootstrap() {
 }
 
 bootstrap()
+-----------------------------------------------------------
+get data from client controller
+
+import {EventPattern} from '@nestjs/microservices'
+
+@Controller('notification-user-setting')
+export class NotificationUserSettingController {
+
+  @EventPattern('hello')
+        async hello(data:any){
+            console.log(data);
+}
+
+}
 ---------------------------------------------------------------
 client module configuration
 
@@ -63,8 +77,7 @@ async create(){
 }
         
 }
-
-
+------------------------------------------------------------
 
 
 
